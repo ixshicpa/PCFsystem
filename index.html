@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><title>Petty Cash System</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>
+:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);--bg:#f6f5f1;--card:#fff;--tx:#1d1d1b;--mu:#6b6a64;--bd:#e2e0d8;--ac:#1f6f5c;--ac2:#e3f1ed;--wa:#b4630a;--er:#b3261e}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#171716;--card:#222221;--tx:#efeee9;--mu:#a09f98;--bd:#383835;--ac:#4fb59c;--ac2:#1d3029;--wa:#e0a04d;--er:#f2837c}}
+:root[data-theme="dark"]{--bg:#171716;--card:#222221;--tx:#efeee9;--mu:#a09f98;--bd:#383835;--ac:#4fb59c;--ac2:#1d3029;--wa:#e0a04d;--er:#f2837c}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--tx);font:15px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif}
+main{max-width:860px;margin:0 auto;padding:16px}
+h1{font-size:20px;margin:0}h2{font-size:16px;margin:0 0 10px}
+header{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:14px}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:14px;margin-bottom:12px}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}.sp{justify-content:space-between}
+.mu{color:var(--mu);font-size:13px}
+label{display:block;text-transform:uppercase;letter-spacing:.04em;font-size:12px;color:var(--mu);margin:8px 0 3px}
+input,select,textarea{width:100%;padding:8px 10px;border:1px solid var(--bd);border-radius:8px;background:var(--bg);color:var(--tx);font:inherit}
+button{padding:8px 14px;border-radius:8px;border:1px solid var(--bd);background:var(--card);color:var(--tx);font:inherit;cursor:pointer}
+button.p{background:var(--ac);color:#fff;border-color:var(--ac)}button.d{color:var(--er)}button:disabled{opacity:.5}
+.tabs{display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap}.tabs button.on{background:var(--ac2);border-color:var(--ac);color:var(--ac)}
+.badge{font-size:12px;padding:2px 9px;border-radius:99px;background:var(--ac2);color:var(--ac);white-space:nowrap}
+.badge.w{background:#fbeedb;color:var(--wa)}.badge.e{background:#fbe4e2;color:var(--er)}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:0 10px}@media(max-width:560px){.g2{grid-template-columns:1fr}}
+.tw{overflow-x:auto}table{border-collapse:collapse;width:100%;font-size:13px}th,td{border-bottom:1px solid var(--bd);padding:5px 6px;text-align:left}td input{min-width:70px;padding:5px}
+.amt{font-variant-numeric:tabular-nums;font-weight:600}
+dialog{border:1px solid var(--bd);border-radius:12px;background:var(--card);color:var(--tx);width:min(680px,94vw);padding:16px}
+dialog::backdrop{background:rgba(0,0,0,.45)}.fg{display:grid;grid-template-columns:repeat(4,1fr);gap:0 12px}@media(max-width:700px){.fg{grid-template-columns:1fr 1fr}.fg>div{grid-column:auto!important}}@media(max-width:480px){.fg{grid-template-columns:1fr}}.pw{position:relative}.pw span{position:absolute;left:10px;top:8px;color:var(--mu)}.pw input{padding-left:26px}.note{background:var(--ac2);border:1px solid var(--ac);border-radius:8px;padding:8px 12px;margin:8px 0;font-size:14px}.err{color:var(--er);font-size:13px;margin-top:6px}
+</style></head><body><main id="app"><p class="mu">Loading…</p></main>
+<dialog id="dlg"></dialog>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script>
+/* Demo mode: runs only outside Claude. Data is saved in this browser (localStorage). */
+(function(){if(window.claude)return;
+const P="pcs:",L=[];
+const get=p=>{const v=localStorage.getItem(P+p);return v?JSON.parse(v):null};
+const kids=c=>{const o=[],pre=P+c+"/";for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(k.startsWith(pre)&&!k.slice(pre.length).includes("/"))o.push(k.slice(pre.length))}return o.sort()};
+const sd=p=>{const d=get(p);return{id:p.split("/").pop(),exists:!!d,data:()=>d||undefined}};
+const sc=c=>{const docs=kids(c).map(i=>sd(c+"/"+i));return{docs,size:docs.length,empty:!docs.length}};
+const fire=()=>L.slice().forEach(l=>{try{l.f(l.col?sc(l.p):sd(l.p))}catch(e){}});
+window.addEventListener("storage",fire);
+const sub=(p,col,f)=>{const l={p,col,f};L.push(l);setTimeout(()=>f(col?sc(p):sd(p)),0);return()=>{const i=L.indexOf(l);if(i>=0)L.splice(i,1)}};
+const put=(p,d)=>{localStorage.setItem(P+p,JSON.stringify(d));fire()};
+const doc=p=>({get:async()=>sd(p),set:async d=>put(p,d),update:async d=>put(p,{...(get(p)||{}),...d}),delete:async()=>{localStorage.removeItem(P+p);fire()},onSnapshot:f=>sub(p,false,f)});
+const col=c=>({doc:i=>doc(c+"/"+i),onSnapshot:f=>sub(c,true,f)});
+const mods={user:{id:async()=>"u_local",canEdit:()=>true,isOwner:()=>true,profiles:async()=>({})},db:{doc,collection:col},
+ downloads:{save:async({filename,data})=>{const a=document.createElement("a");a.href=URL.createObjectURL(data instanceof Blob?data:new Blob([data]));a.download=filename;a.click()}}};
+window.claude={use:async n=>mods[n]||null};
+document.addEventListener("DOMContentLoaded",()=>{const b=document.createElement("div");b.className="note";b.style.cssText="position:fixed;bottom:8px;left:8px;right:8px;max-width:520px;margin:auto;z-index:5";b.innerHTML="Demo mode: data is saved only in this browser. <button onclick='this.parentNode.remove()'>OK</button>";document.body.appendChild(b)});
+})();
+</script>
+<script>
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const peso=n=>"₱"+Number(n||0).toLocaleString("en-PH",{minimumFractionDigits:2,maximumFractionDigits:2});
+const today=()=>new Date().toISOString().slice(0,10);
+const addDays=(d,n)=>{const x=new Date(d);x.setDate(x.getDate()+n);return x.toISOString().slice(0,10)};
+const ST={pending:["Waiting for supervisor",""],approved:["Approved, waiting for release","w"],released:["Released, needs liquidation","w"],liquidated:["Liquidated, needs checking","w"],closed:["Closed",""],rejected:["Rejected","e"]};
+ST.returned=["Returned for clarification","w"];
+let db,uid,prof,reqs=[],tab="",mode="",unsub,unsubS,VS={company:"",prefix:"PCV-",days:5},ARM="",accF="wait",vsOpen=false;
+const ROLES={requester:"Requester (Staff)",supervisor:"Supervisor",accounting:"Accounting"};
+
+let AA={},FD=[],PA={},unsubAA,unsubFD,unsubPA,unsubP,unsubSE,ETS=null,ETD=null,audM=today().slice(0,7),audAll=false,UU,isAdmin=false,SU=[],RO={},unsubR,unsubSU,unsubRO;
+const softRender=()=>{const ae=document.activeElement;if(!(ae&&/INPUT|SELECT|TEXTAREA/.test(ae.tagName)))render()};
+async function init(){
+  try{UU=await claude.use("user");db=await claude.use("db");if(!db||!UU){$("#app").innerHTML='<div class="card">Cannot open the database. Please sign in and open this link as a <b>Contributor</b> or higher.</div>';return}
+  uid=await UU.id();isAdmin=!!(await UU.canEdit())||!!(await UU.isOwner());}catch(e){$("#app").innerHTML='<div class="card">Could not load the system.</div>';return}
+  let su=null;try{const x=await db.doc("signups/"+uid).get();su=x.exists?x.data():null}catch(e){}
+  if(!su||!su.name)return signup();
+  gate(su.name);
+}
+function signup(){
+  $("#app").innerHTML=`<div class="card" style="max-width:420px;margin:30px auto"><h1>Petty Cash System</h1><p class="mu">Sign up to use the system. After you sign up, the admin will set your role and department.</p>
+  <label>Username</label><input id="nm" placeholder="Example: JUAN0101"><div class="row" style="margin-top:12px"><button class="p" id="go">Sign up</button></div><div class="err" id="e"></div></div>`;
+  $("#go").onclick=async()=>{const name=$("#nm").value.trim();if(!name){$("#e").textContent="Please enter a username.";return}
+    try{await db.doc("signups/"+uid).set({name,joinedAt:Date.now()})}catch(e){$("#e").textContent="Could not sign up: "+e.code;return}gate(name)};
+}
+function stopData(){if(unsub){unsub();unsub=null}if(unsubS){unsubS();unsubS=null}if(unsubSU){unsubSU();unsubSU=null}if(unsubRO){unsubRO();unsubRO=null}if(unsubSE){unsubSE();unsubSE=null}if(unsubAA){unsubAA();unsubAA=null}if(unsubFD){unsubFD();unsubFD=null}if(unsubPA){unsubPA();unsubPA=null}}
+function pending(name){stopData();$("#app").innerHTML=`<div class="card" style="max-width:480px;margin:30px auto"><h1>Waiting for access</h1><p>Hi <b>${esc(name)}</b>! Your account is <b>pending</b>. The admin has to set your role and department first. This page updates by itself once that is done.</p></div>`}
+function gate(name){
+  if(isAdmin){prof={role:"accounting",dept:"Accounting Department",name};tab="";start();return}
+  if(unsubR)unsubR();if(unsubP)unsubP();
+  let rd=null,pd=null;
+  const apply=()=>{const d=rd&&rd.role?rd:pd;if(!d||!d.role||d.role==="pending"){prof=null;pending(name);return}
+    const np={role:d.role,dept:d.dept||"",name},ch=!prof||prof.role!==np.role||prof.dept!==np.dept;prof=np;if(ch){tab="";start()}};
+  unsubR=db.doc("roles/"+uid).onSnapshot(x=>{rd=x.exists?x.data():null;apply()},()=>pending(name));
+  unsubP=db.doc("preapproved/"+dkey(name)).onSnapshot(x=>{pd=x.exists?x.data():null;apply()},()=>{});
+}
+function start(){
+  mode=prof.role==="accounting"?"todo":"list";tab=tab||(prof.role==="accounting"?"todo":prof.role==="supervisor"?"todo":"new");
+  stopData();
+  unsubSE=db.doc("settings/expenseTypes").onSnapshot(x=>{const d=x.exists?x.data():null;ETS=d&&Array.isArray(d.list)?d.list:null;softRender()},()=>{});
+  unsubAA=db.collection("autoapprove").onSnapshot(x=>{AA={};x.docs.forEach(d=>AA[d.id]=d.data()||{});softRender()},()=>{});
+  if(prof.role==="accounting")unsubFD=db.collection("fund").onSnapshot(x=>{FD=x.docs.map(d=>d.data());softRender()},()=>{});
+  if(isAdmin){unsubPA=db.collection("preapproved").onSnapshot(x=>{PA={};x.docs.forEach(d=>PA[d.id]=d.data());softRender()},()=>{});unsubSU=db.collection("signups").onSnapshot(x=>{SU=x.docs.map(d=>({id:d.id,...d.data()}));softRender()},()=>{});unsubRO=db.collection("roles").onSnapshot(x=>{RO={};x.docs.forEach(d=>RO[d.id]=d.data());softRender()},()=>{})}
+  unsubS=db.doc("settings/voucher").onSnapshot(x=>{if(x.exists)VS={...VS,...x.data()};const ae=document.activeElement;if(!(ae&&/INPUT|SELECT|TEXTAREA/.test(ae.tagName)))render()},()=>{});
+  unsub=db.collection("requests").onSnapshot(s=>{reqs=s.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>b.createdAt-a.createdAt);const ae=document.activeElement;if(tab==="new"&&ae&&/INPUT|SELECT|TEXTAREA/.test(ae.tagName)&&$("#myreq")){$("#myreq").innerHTML=myReqHtml();document.querySelectorAll("#myreq [data-a]").forEach(b=>b.onclick=()=>act(b.dataset.a,b.dataset.i))}else render()},e=>{$("#app").innerHTML='<div class="card">Cannot read requests ('+esc(e.code)+').</div>'});
+}
+const mine=()=>reqs.filter(r=>prof.role==="accounting"||(prof.role==="supervisor"?r.dept===prof.dept:r.createdBy===uid));
+const open=n=>reqs.some(r=>(r.status==="released"||r.status==="liquidated")&&r.employee.trim().toLowerCase()===n.trim().toLowerCase());
+
+function render(){
+  if($("#sub")&&!skipCap){FS={};["dn","n","dp","a","et","p","rm","eo","ur","urr"].forEach(k=>{const e=$("#"+k);if(e)FS[k]=e.type==="checkbox"?e.checked:e.value})}skipCap=false;
+  const R=prof.role,L=mine();
+  const todo=R==="supervisor"?L.filter(r=>r.status==="pending"||r.status==="returned"):R==="accounting"?L.filter(r=>r.status==="approved"||r.status==="liquidated"):L.filter(r=>r.status==="released"||r.status==="returned");
+  const tabs=[["todo",R==="supervisor"?"To Approve":R==="accounting"?"Accounting":"To Liquidate",todo.length],];if(R!=="accounting")tabs.push(["list","All Requests",L.length]);
+  if(R!=="accounting"||isAdmin)tabs.unshift(["new","Request Budget"]);
+  if(R==="accounting")tabs.push(["log","Open Cash"]);
+  if(R!=="requester")tabs.push(["rep","Reports"],["audit","Audit Log"]);
+  if(R==="accounting")tabs.push(["settings","Settings"]);
+  if(isAdmin)tabs.push(["users","Users"]);
+  if(R==="supervisor"||isAdmin)tabs.push(["auto","Approval Limits"]);
+  if(R==="accounting")tabs.push(["fund","Petty Cash Fund"]);
+  tabs.push(["guide","Guide"]);
+  let body="";
+  if(tab==="new")body=newForm();
+  else if(tab==="log")body=logView();
+  else if(tab==="rep")body=repView();
+  else if(tab==="guide")body=guideView();
+  else if(tab==="auto"&&(R==="supervisor"||isAdmin))body=autoView();
+  else if(tab==="fund"&&R==="accounting")body=fundView();
+  else if(tab==="audit"&&R!=="requester")body=auditView();
+  else if(tab==="settings"&&R==="accounting")body=settingsView();
+  else if(tab==="users"&&isAdmin)body=usersView();
+  else if(tab==="todo"&&R==="accounting")body=accView();
+  else{const rows=tab==="todo"?todo:L;body=rows.length?rows.map(card).join(""):'<div class="card mu">Nothing here.</div>'}
+  $("#app").innerHTML=`<header><div><h1>Petty Cash System</h1><div class="mu">${esc(prof.name)} · ${isAdmin?"Admin":ROLES[R]}${prof.dept&&!isAdmin?" · "+esc(prof.dept):""}</div></div></header>${realUid?`<div class="note">Viewing as <b>${esc(prof.name)}</b> (${ROLES[R]}). Anything you do is saved under this person's name. <button id="vb">Back to Admin</button></div>`:""}
+  <div class="tabs">${tabs.map(([k,n,c])=>`<button data-t="${k}" class="${tab===k?"on":""}">${n}${c!=null?" ("+c+")":""}</button>`).join("")}</div>${body}`;
+  document.querySelectorAll("[data-t]").forEach(b=>b.onclick=()=>{tab=b.dataset.t;ETD=null;flash="";render()});
+  document.querySelectorAll("[data-a]").forEach(b=>b.onclick=()=>act(b.dataset.a,b.dataset.i));
+  if($("#vb"))$("#vb").onclick=backToAdmin;
+  document.querySelectorAll("[data-dt]").forEach(b=>b.onclick=()=>review(b.dataset.dt));
+  if(tab==="new")bindNew();
+  if(tab==="rep")bindRep();
+  if(tab==="auto")bindAuto();
+  if(tab==="fund")bindFund();
+  if(tab==="audit")bindAudit();
+  if(tab==="settings"&&R==="accounting")bindSettings();
+  if(tab==="users"&&isAdmin)bindUsers();
+  if(tab==="todo"&&R==="accounting")bindAcc();
+}
+const DEPTS=["Accounting Department","Operations Department","Sales Department","Admin Department","HR Department","IT Department","Others"];
+const deptList=()=>[...new Set([...DEPTS,prof&&prof.dept,...reqs.map(r=>r.dept)].filter(Boolean))];
+let FS={},skipCap=false;
+function myReqHtml(){const m=reqs.filter(r=>r.createdBy===uid);return m.length?m.map(card).join(""):'<div class="card mu" style="text-align:center;padding:24px">You have no requests yet. Fill in the form above to send your first one.</div>'}
+function newForm(){
+  const sup=prof.role==="supervisor"||isAdmin,v=k=>esc(FS[k]??""),ds=FS.dp??prof.dept;
+  return `${flash?`<div class="note">${esc(flash)}</div>`:""}<div class="card"><h2>NEW REQUEST</h2><p class="mu">Fill in the form and press Submit. ${sup?"":"Your supervisor will review it first, then it goes to Accounting."}</p><div class="note"><b>Note:</b> Cash is released at least 1 working day after your request is approved. If you need the cash today, tick <b>Urgent</b> below and explain why.</div>
+  <div class="fg"><div><label>Request Date</label><input id="dn" type="date" value="${FS.dn||today()}"></div>
+  <div><label>Employee Name</label><input id="n" value="${esc(FS.n??prof.name)}"></div>
+  <div><label>Department</label><select id="dp">${deptList().map(d=>`<option ${d===ds?"selected":""}>${esc(d)}</option>`).join("")}</select></div>
+  <div><label>Amount Requested</label><div class="pw"><span>₱</span><input id="a" type="number" min="1" step="0.01" placeholder="0.00" value="${v("a")}"></div></div>
+  <div><label>Expense Type</label><select id="et"><option value="" disabled ${FS.et?"":"selected"}>Choose expense type</option>${[...ETL(),"Others"].map(t=>`<option ${t===FS.et?"selected":""}>${esc(t)}</option>`).join("")}</select></div>
+  <div id="eow" style="${FS.et==="Others"?"":"display:none"}"><label>Specify expense</label><input id="eo" placeholder="What is this expense?" value="${v("eo")}"></div>
+  <div style="grid-column:span 2"><label>Purpose / Description</label><input id="p" placeholder="Example: Router for the office" value="${v("p")}"></div></div>
+  <label style="display:flex;gap:6px;align-items:center;text-transform:none;font-size:14px"><input type="checkbox" id="ur" style="width:auto" ${FS.ur?"checked":""}> Urgent (cash needed today)</label><div id="urw" style="${FS.ur?"":"display:none"}"><label>Why is it urgent?</label><input id="urr" value="${v("urr")}"></div>
+  <label>Remarks (optional)</label><textarea id="rm" rows="3">${v("rm")}</textarea>
+  <div class="row" style="justify-content:center;margin-top:14px"><button class="p" id="sub">Submit Request</button></div><div class="err" id="e" style="text-align:center"></div></div>
+  <h2 style="margin-top:18px">MY REQUESTS</h2><div id="myreq">${myReqHtml()}</div>`;
+}
+function bindNew(){
+  $("#ur").onchange=()=>{$("#urw").style.display=$("#ur").checked?"":"none"};
+  $("#et").onchange=()=>{$("#eow").style.display=$("#et").value==="Others"?"":"none"};
+  $("#sub").onclick=async()=>{
+    const n=$("#n").value.trim(),a=parseFloat($("#a").value),p=$("#p").value.trim(),et=$("#et").value,rm=$("#rm").value.trim(),e=$("#e");
+    if(!n||!p||!(a>0)||!et){e.textContent="Please fill in the employee name, amount, expense type and purpose.";return}
+    const ur=$("#ur").checked,urr=$("#urr").value.trim();if(ur&&!urr){e.textContent="Please explain why it is urgent.";return}
+    const eo=$("#eo").value.trim();if(et==="Others"&&!eo){e.textContent="Please specify what the expense is.";return}
+    if(open(n)){e.textContent=n+" still has cash that is not liquidated. Liquidate it before requesting again.";return}
+    const sup=prof.role==="supervisor"||isAdmin,now=Date.now(),ds=today().replace(/-/g,""),cfg=AA[dkey($("#dp").value)]||{},lim=Math.min((cfg.rules||{})[et]||0,cfg.maxEach||Infinity),used=reqs.filter(x=>x.auto&&x.dept===$("#dp").value&&x.status!=="rejected"&&mkey(x.createdAt)===mkey(now)).reduce((t,x)=>t+(x.approvedAmount||x.amount),0),auto=!sup&&lim>0&&a<=lim&&(!cfg.maxMonth||used+a<=cfg.maxMonth),ok=sup||auto;
+    const no="CR-"+ds+"-"+String(reqs.filter(r=>r.no&&r.no.includes(ds)).length+1).padStart(3,"0");
+    const r={no,employee:n,dept:$("#dp").value,purpose:p,type:et,typeOther:et==="Others"?eo:"",urgent:ur,urgentReason:urr,amount:a,dateNeeded:$("#dn").value,remarks:rm,status:ok?"approved":"pending",auto,createdBy:uid,createdAt:now,approvedBy:ok?(auto?"auto":uid):null,approvedAt:ok?now:null,approvedAmount:ok?a:null,supNotes:sup?rm:"",log:[[now,sup?"Created and approved by Supervisor":auto?"Submitted and auto-approved (supervisor rule)":"Submitted request",prof.name,a,rm||p]]};
+    try{await db.collection("requests").doc("r"+now).set(r)}catch(x){e.textContent="Could not save: "+x.code;return}
+    flash=sup?"Your request was approved and sent to Accounting.":auto?"Your request was approved automatically because it is within the limit set by your supervisor. It now goes to Accounting for release.":"Your request was sent to your supervisor for approval.";FS={};skipCap=true;render();
+  };
+}
+function card(r){
+  const R=prof.role,[sl,sc]=ST[r.status];let btn="";
+  if(R==="supervisor"&&r.status==="pending")btn=`<button class="p" data-a="approve" data-i="${r.id}">Approve</button><button class="d" data-a="reject" data-i="${r.id}">Reject</button>`;
+  if(R==="accounting"&&r.status==="approved")btn=`<button class="p" data-a="release" data-i="${r.id}">Release Cash</button><button class="d" data-a="reject" data-i="${r.id}">Reject</button>`;
+  if(R==="accounting"&&r.status==="liquidated")btn=`<button class="p" data-a="verify" data-i="${r.id}">Check &amp; Settle</button>`;
+  if(r.status==="released"&&(r.createdBy===uid||R==="supervisor"||R==="accounting"))btn=`<button class="p" data-a="liquidate" data-i="${r.id}">Liquidate</button>`;
+  if(r.status==="returned"&&(r.createdBy===uid||R==="supervisor"))btn=`<button class="p" data-a="resubmit" data-i="${r.id}">Reply &amp; Resubmit</button>`;
+  if(r.voucherNo)btn+=`<button data-a="print" data-i="${r.id}">🖨 Voucher &amp; Liquidation Form</button>`;
+  const late=r.status==="released"&&r.dueDate&&r.dueDate<today();
+  return `<div class="card"><div class="row sp"><b>${esc(r.no)} · ${esc(r.employee)}${urg(r)}</b><span class="badge ${late?"e":sc}">${late?"Overdue":sl}</span></div>
+  <div class="mu">${esc(r.dept)} · ${typeLabel(r)?esc(typeLabel(r))+" · ":""}Date: ${esc(r.dateNeeded)}</div>${age(r)?`<div class="mu">⏱ ${esc(age(r))}</div>`:""}${r.auto?`<div class="mu" style="color:var(--ac)">✓ Approved automatically because it is within the supervisor's limit.</div>`:""}<p style="margin:8px 0">${esc(r.purpose)}</p>${r.remarks&&r.remarks!==r.supNotes?`<div class="mu">Remarks: ${esc(r.remarks)}</div>`:""}${r.supNotes?`<div class="mu">Supervisor remarks: ${esc(r.supNotes)}</div>`:""}
+  <div class="row sp"><span>Requested: <span class="amt">${peso(r.amount)}</span></span>${r.voucherNo?`<span>Voucher: <b>${esc(r.voucherNo)}</b> · Received: <span class="amt">${peso(r.cashReceived)}</span> · Due: ${esc(r.dueDate)}</span>`:""}</div>
+  ${r.rejectReason?`<div class="err">Reason for rejection: ${esc(r.rejectReason)}</div>`:""}
+  ${r.accRemarks?`<div class="mu">Accounting remarks: ${esc(r.accRemarks)}</div>`:""}${r.reply?`<div class="mu">Reply: ${esc(r.reply)}</div>`:""}${r.items?liqTable(r):""}
+  <details style="margin-top:8px"><summary class="mu">History</summary>${r.log.map(l=>`<div class="mu">${new Date(l[0]).toLocaleString("en-PH")} – ${esc(l[1])}${l[2]?" ("+esc(l[2])+")":""}</div>`).join("")}</details>
+  ${btn?`<div class="row" style="margin-top:10px">${btn}</div>`:""}</div>`;
+}
+function liqTable(r){
+  const tot=r.items.reduce((s,i)=>s+i.amt,0),diff=r.cashReceived-tot;
+  return `<div class="tw" style="margin-top:8px"><table><tr><th>#</th><th>Date</th><th>OR No.</th><th>Supplier</th><th>Description</th><th>Amount</th></tr>
+  ${r.items.map((i,k)=>`<tr><td>${k+1}</td><td>${esc(i.date)}</td><td>${esc(i.or)}</td><td>${esc(i.sup)}</td><td>${esc(i.desc)}</td><td class="amt">${peso(i.amt)}</td></tr>`).join("")}
+  <tr><td colspan="5" align="right"><b>Total Expenses</b></td><td class="amt">${peso(tot)}</td></tr></table></div>
+  <div class="amt" style="margin-top:6px">${diff>0?"Excess cash to return: "+peso(diff):diff<0?"Additional cash needed: "+peso(-diff):"No excess or shortage"}</div>`;
+}
+function logView(){
+  const o=reqs.filter(r=>r.status==="released"||r.status==="liquidated");
+  return `<div class="card"><h2>Open Cash</h2><p class="mu">Cash that was released and is not closed yet. Click a voucher number to see all its details.</p>${o.length?`<div class="tw"><table><tr><th>Voucher</th><th>Employee</th><th>Department</th><th>Released</th><th>Due</th><th>Aging</th><th>Action</th></tr>${o.map(r=>`<tr><td><button data-dt="${r.id}" style="padding:2px 8px">${esc(r.voucherNo)}</button></td><td>${esc(r.employee)}</td><td>${esc(r.dept)}</td><td class="amt">${peso(r.cashReceived)}</td><td>${esc(r.dueDate)}${r.status==="released"&&r.dueDate<today()?' <span class="badge e">LATE</span>':""}</td><td>${esc(age(r))}</td><td>${r.status==="released"?`<button class="p" data-a="liquidate" data-i="${r.id}">Liquidate</button>`:`<button class="p" data-a="verify" data-i="${r.id}">Check &amp; Settle</button>`}</td></tr>`).join("")}</table></div><p class="amt">Total: ${peso(o.reduce((s,r)=>s+r.cashReceived,0))}</p>`:'<p class="mu">No open cash.</p>'}</div>`;
+}
+async function save(id,patch,msg){
+  const r=reqs.find(x=>x.id===id);
+  try{await db.collection("requests").doc(id).update({...patch,log:[...r.log,[Date.now(),msg,prof.name,patch.cashReceived??patch.approvedAmount??r.cashReceived??r.amount,patch.rejectReason||patch.supNotes||""]]})}catch(e){alert("Could not save: "+e.code)}
+}
+function dlg(html){const d=$("#dlg");d.innerHTML=html;d.showModal();return d}
+function act(a,id){
+  const r=reqs.find(x=>x.id===id),now=Date.now();
+  if(a==="resubmit"){const d=dlg(`<h2>Reply to Accounting – ${esc(r.no)}</h2><p class="mu">Accounting: ${esc(r.accRemarks||"")}</p><label>Your clarification</label><textarea id="rp" rows="3"></textarea><div class="row" style="margin-top:12px"><button class="p" id="ok">Resubmit</button><button id="x">Cancel</button></div><div class="err" id="e"></div>`);
+    $("#x").onclick=()=>d.close();$("#ok").onclick=()=>{const v=$("#rp").value.trim();if(!v){$("#e").textContent="Please write your clarification.";return}d.close();save(id,{status:"approved",reply:v},"Resubmitted with clarification")};return}
+  if(a==="print")return preview(r);
+  if(a==="approve"){const d=dlg(`<h2>Approve: ${esc(r.no)}</h2><p class="mu">${esc(r.employee)} – ${esc(r.purpose)}</p><div class="g2"><div><label>Approved amount (₱)</label><input id="aa" type="number" step="0.01" value="${r.amount}"></div></div><label>Remarks (shown on the voucher)</label><textarea id="sn" rows="3"></textarea><div class="row" style="margin-top:12px"><button class="p" id="ok">Approve</button><button id="x">Cancel</button></div><div class="err" id="e"></div>`);
+    $("#x").onclick=()=>d.close();$("#ok").onclick=()=>{const aa=parseFloat($("#aa").value);if(!(aa>0)){$("#e").textContent="Enter a valid amount.";return}const sn=$("#sn").value.trim();d.close();save(id,{status:"approved",approvedBy:uid,approvedAt:now,approvedAmount:aa,supNotes:sn},"Approved by Supervisor ("+peso(aa)+")"+(sn?" – with remarks":""))};return}
+  if(a==="reject"){const d=dlg(`<h2>Reject ${esc(r.no)}</h2><label>Reason</label><textarea id="rs" rows="3"></textarea><div class="row" style="margin-top:12px"><button class="p" id="ok">Reject</button><button id="x">Cancel</button></div>`);
+    $("#x").onclick=()=>d.close();$("#ok").onclick=()=>{const v=$("#rs").value.trim();if(!v)return;d.close();save(id,{status:"rejected",rejectReason:v},"Rejected ("+(prof.role==="accounting"?"Accounting":"Supervisor")+")")};return}
+  if(a==="release"){const n=reqs.filter(x=>x.voucherNo).length+1,d=dlg(`<h2>Release: ${esc(r.no)}</h2><p class="mu">${esc(r.employee)} – ${esc(r.purpose)}</p><p class="mu">Fund balance: <b>${peso(fundCalc().bal)}</b>${fundCalc().bal<(r.approvedAmount||r.amount)?' <span style="color:var(--er)">– not enough for this request</span>':""}</p><div class="g2"><div><label>Voucher No.</label><input id="vn" value="${esc(VS.prefix)}${String(n).padStart(5,"0")}"></div><div><label>Amount to release (₱)</label><input id="am" type="number" step="0.01" value="${r.approvedAmount||r.amount}"></div><div><label>Liquidation Due Date</label><input id="dd" type="date" value="${addDays(today(),+VS.days||5)}"></div></div><div class="row" style="margin-top:12px"><button class="p" id="ok">Confirm Release</button><button id="x">Cancel</button></div><div class="err" id="e"></div>`);
+    $("#x").onclick=()=>d.close();$("#ok").onclick=()=>{const am=parseFloat($("#am").value),vn=$("#vn").value.trim();if(!(am>0)||!vn){$("#e").textContent="Enter the voucher number and amount.";return}d.close();save(id,{status:"released",accRemarks:ARM,voucherNo:vn,cashReceived:am,dueDate:$("#dd").value,releasedAt:now,releasedBy:uid},"Cash released ("+peso(am)+") – "+vn)};return}
+  if(a==="liquidate"){let items=[{}];
+    const d=dlg("");const draw=()=>{const tot=items.reduce((s,i)=>s+(parseFloat(i.amt)||0),0),df=r.cashReceived-tot;
+      d.innerHTML=`<h2>Liquidation Form – ${esc(r.voucherNo)}</h2><p class="mu">${esc(r.employee)} · Cash Received: <b>${peso(r.cashReceived)}</b> · Due: ${esc(r.dueDate)}</p>
+      <div class="tw"><table><tr><th>#</th><th>Date</th><th>OR No.</th><th>Supplier</th><th>Description</th><th>Amount</th><th></th></tr>${items.map((i,k)=>`<tr><td>${k+1}</td><td><input type="date" data-k="${k}" data-f="date" value="${esc(i.date||"")}"></td><td><input data-k="${k}" data-f="or" value="${esc(i.or||"")}"></td><td><input data-k="${k}" data-f="sup" value="${esc(i.sup||"")}"></td><td><input data-k="${k}" data-f="desc" value="${esc(i.desc||"")}"></td><td><input type="number" step="0.01" data-k="${k}" data-f="amt" value="${esc(i.amt||"")}"></td><td><button data-rm="${k}">✕</button></td></tr>`).join("")}</table></div>
+      <div class="row sp" style="margin-top:8px"><button id="ad">+ Add row</button><span class="amt">Total: ${peso(tot)} · ${df>0?"Excess: "+peso(df):df<0?"Short: "+peso(-df):"Matches"}</span></div>
+      <p class="mu">Attach the receipts in order, using the row numbers.</p><div class="row"><button class="p" id="ok">Submit</button><button id="x">Cancel</button></div><div class="err" id="e"></div>`;
+      d.querySelectorAll("input[data-k]").forEach(i=>i.onchange=()=>{items[i.dataset.k][i.dataset.f]=i.value;draw()});
+      d.querySelectorAll("[data-rm]").forEach(b=>b.onclick=()=>{items.splice(b.dataset.rm,1);if(!items.length)items=[{}];draw()});
+      $("#ad").onclick=()=>{items.push({});draw()};$("#x").onclick=()=>d.close();
+      $("#ok").onclick=()=>{const ok=items.every(i=>i.date&&i.or&&i.sup&&i.desc&&parseFloat(i.amt)>0);if(!ok){$("#e").textContent="Fill in every column in each row.";return}
+        d.close();save(id,{status:"liquidated",items:items.map(i=>({date:i.date,or:i.or,sup:i.sup,desc:i.desc,amt:parseFloat(i.amt)})),liqAt:Date.now(),actualExpense:items.reduce((s,i)=>s+parseFloat(i.amt),0)},prof.role==="accounting"?"Liquidation recorded by Accounting":"Liquidation submitted")}};draw();return}
+  if(a==="verify"){const tot=r.actualExpense??r.items.reduce((s,i)=>s+i.amt,0),df=r.cashReceived-tot,k=df>0?"returned":df<0?"additional":"none";
+    const d=dlg(`<h2>Check &amp; settle: ${esc(r.voucherNo)}</h2>${liqTable(r)}<p class="amt">Released: ${peso(r.cashReceived)} · Actual expense: ${peso(tot)}</p>
+    ${k==="none"?"<p>No excess or shortage.</p>":`<p><b>${k==="returned"?"Excess cash to be returned: "+peso(df):"Additional cash needed: "+peso(-df)}</b></p><label>${k==="returned"?"Amount received back from the employee":"Amount given to the employee"} (₱)</label><input id="sa" type="number" step="0.01" value="${Math.abs(df).toFixed(2)}"><label style="display:flex;gap:6px;align-items:center;text-transform:none"><input type="checkbox" id="sc" style="width:auto"> ${k==="returned"?"I confirm the cash was received":"I confirm the cash was given"}</label>`}
+    <div class="row" style="margin-top:12px"><button class="p" id="ok">Record &amp; close</button><button id="x">Cancel</button></div><div class="err" id="e"></div>`);
+    $("#x").onclick=()=>d.close();$("#ok").onclick=()=>{let sa=0;if(k!=="none"){sa=parseFloat($("#sa").value);if(!$("#sc").checked||!(sa>0)){$("#e").textContent="Enter the amount and confirm the cash.";return}}
+      d.close();save(id,{status:"closed",closedAt:now,actualExpense:tot,settleType:k,settleAmount:sa,settledAt:now},"Closed. "+(k==="returned"?"Excess returned "+peso(sa):k==="additional"?"Additional cash given "+peso(sa):"No excess or shortage"))}}
+}
+
+const SHEETCSS=`.sheet{background:#fff;color:#000;width:190mm;margin:0 auto;font:11px/1.35 Arial,Helvetica,sans-serif}.sheet *{box-sizing:border-box}
+.half{height:135mm;overflow:hidden;padding:3mm 0}.vs{display:flex;gap:6mm;border-bottom:1.5px dashed #000;height:100%;padding-bottom:3mm}
+.vc{flex:1;border:1px solid #000;padding:3mm;display:flex;flex-direction:column}.vh{display:flex;justify-content:space-between;align-items:center;margin-bottom:2mm;font-size:12px}.vh span{border:1px solid #000;padding:1px 6px;font-size:10px;font-weight:700}
+.sheet table{border-collapse:collapse;width:100%}.sheet td,.sheet th{border:1px solid #444;padding:2px 4px;text-align:left;vertical-align:top}.sheet th{background:#eee}
+.sg{display:flex;gap:6px;margin-top:auto;padding-top:8mm}.sg div{flex:1;border-top:1px solid #000;text-align:center;font-size:9px;padding-top:2px}
+.lq h3{margin:0 0 2mm;text-align:center;font-size:13px}.lq .r td{height:7mm}.rt{text-align:right}.nt{font-size:9.5px;margin-top:2mm}`;
+const PCSS=SHEETCSS+`#pv{position:fixed;inset:0;background:#777;overflow:auto;z-index:50;padding:10px}#pv .tb{display:flex;gap:8px;justify-content:center;margin-bottom:10px}
+@media print{@page{size:A4;margin:10mm}body>*:not(#pv){display:none!important}#pv{position:static;background:none;padding:0;overflow:visible}#pv .tb{display:none}}`;
+{const st=document.createElement("style");st.textContent=PCSS;document.head.appendChild(st)}
+const WORDS=n=>{const o=["","One","Two","Three","Four","Five","Six","Seven","Eight","Nine","Ten","Eleven","Twelve","Thirteen","Fourteen","Fifteen","Sixteen","Seventeen","Eighteen","Nineteen"],t=["","","Twenty","Thirty","Forty","Fifty","Sixty","Seventy","Eighty","Ninety"];
+  const f=n=>n<20?o[n]:n<100?t[(n/10)|0]+(n%10?"-"+o[n%10]:""):o[(n/100)|0]+" Hundred"+(n%100?" "+f(n%100):"");
+  let p=Math.floor(n),c=Math.round((n-p)*100),s="";for(const [v,nm] of [[1e9,"Billion"],[1e6,"Million"],[1e3,"Thousand"]])if(p>=v){s+=f(Math.floor(p/v))+" "+nm+" ";p%=v}
+  if(p||!s)s+=f(p);return s.trim()+" Pesos"+(c?" and "+c+"/100":" Only")};
+function sheet(r){
+  const amt=r.cashReceived,rel=r.releasedAt?new Date(r.releasedAt).toISOString().slice(0,10):today();
+  const v=lbl=>`<div class="vc"><div class="vh"><div>${VS.company?`<b>${esc(VS.company)}</b><br>`:""}<b>PETTY CASH VOUCHER</b></div><span>${lbl}</span></div><table>
+  <tr><td width="38%"><b>Voucher No.</b></td><td>${esc(r.voucherNo)}</td></tr><tr><td><b>Date</b></td><td>${esc(rel)}</td></tr>
+  <tr><td><b>Paid to</b></td><td>${esc(r.employee)}</td></tr><tr><td><b>Department</b></td><td>${esc(r.dept)}</td></tr>
+  <tr><td><b>Cash Request No.</b></td><td>${esc(r.no)}</td></tr><tr><td><b>Request date</b></td><td>${esc(r.dateNeeded)}</td></tr>
+  <tr><td><b>Purpose</b></td><td style="height:16mm">${esc(r.purpose)}</td></tr>
+  <tr><td><b>Remarks</b></td><td style="height:10mm">${esc([r.remarks&&r.remarks!==r.supNotes?r.remarks:"",r.supNotes].filter(Boolean).join(" | "))}</td></tr>
+  <tr><td><b>Amount Requested</b></td><td>${peso(r.amount)}</td></tr><tr><td><b>Amount Approved</b></td><td>${peso(r.approvedAmount||r.amount)}</td></tr>
+  <tr><td><b>Amount Released</b></td><td><b>${peso(amt)}</b></td></tr><tr><td><b>Amount in words</b></td><td>${esc(WORDS(amt))}</td></tr>
+  <tr><td><b>Liquidation due</b></td><td>${esc(r.dueDate)}</td></tr>${r.actualExpense!=null?`<tr><td><b>Actual expense</b></td><td>${peso(r.actualExpense)}</td></tr>`:""}</table>
+  <div class="sg"><div>Prepared by (Accounting)</div><div>Approved by (Supervisor)</div><div>Received by / Date</div></div></div>`;
+  const rows=Array.from({length:9},()=>'<tr class="r"><td></td><td></td><td></td><td></td><td></td><td></td></tr>').join("");
+  return `<div class="half"><div class="vs">${v("ACCOUNTING COPY")}${v("EMPLOYEE COPY")}</div></div>
+  <div class="half lq"><h3>${VS.company?esc(VS.company)+" – ":""}LIQUIDATION FORM</h3><table style="margin-bottom:2mm"><tr><td width="18%"><b>Voucher No.</b></td><td width="32%">${esc(r.voucherNo)}</td><td width="18%"><b>Cash Received</b></td><td>${peso(amt)}</td></tr>
+  <tr><td><b>Employee</b></td><td>${esc(r.employee)}</td><td><b>Due Date</b></td><td>${esc(r.dueDate)}</td></tr><tr><td><b>Department</b></td><td colspan="3">${esc(r.dept)}</td></tr></table>
+  <table><tr><th width="5%">#</th><th width="13%">Date</th><th width="15%">OR/Receipt No.</th><th width="22%">Supplier/Store</th><th>Description</th><th width="15%">Amount (₱)</th></tr>
+  ${rows.replace(/<td><\/td>/,"<td></td>")}<tr><td colspan="5" class="rt"><b>Total Expenses</b></td><td></td></tr></table>
+  <table style="width:60%;margin:2mm 0 0 auto"><tr><td>Cash Received</td><td width="35%">${peso(amt)}</td></tr><tr><td>Less: Total Expenses</td><td></td></tr><tr><td>Excess cash returned / Additional reimbursement</td><td></td></tr></table>
+  <div class="sg" style="padding-top:5mm"><div>Submitted by / Date</div><div>Verified by (Accounting)</div><div>Approved by (Supervisor)</div></div>
+  <div class="nt">Hand in together: <b>your Petty Cash Voucher copy, the Liquidation Form, and your receipts</b> (attach them in date order and number them by row).</div></div>`;
+}
+function preview(r){
+  const p=document.createElement("div");p.id="pv";
+  p.innerHTML=`<div class="tb"><button class="p" id="pp">🖨 Print</button><button id="pd">Download (HTML)</button><button id="px">Close</button></div><div class="sheet">${sheet(r)}</div>`;
+  document.body.appendChild(p);
+  $("#px").onclick=()=>p.remove();$("#pp").onclick=()=>window.print();
+  $("#pd").onclick=async()=>{try{const d=await claude.use("downloads");if(!d){alert("Download is not available.");return}
+    await d.save({filename:r.voucherNo+"-voucher-liquidation.html",data:`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${esc(r.voucherNo)}</title><style>${SHEETCSS}@page{size:A4;margin:10mm}body{margin:0}</style></head><body><div class="sheet">${sheet(r)}</div></body></html>`})}catch(e){}};
+}
+
+const dkey=d=>(d||"").toLowerCase().replace(/[^a-z0-9]+/g,"_");
+const dayText=t=>{const n=Math.floor((Date.now()-t)/864e5);return n<1?"less than 1 day":n===1?"1 day":n+" days"};
+const age=r=>{const m={pending:[r.createdAt,"Waiting for approval for"],approved:[r.approvedAt,"Approved, not released for"],released:[r.releasedAt,"Not liquidated for"],liquidated:[r.liqAt,"Liquidated, not closed for"]}[r.status];return m&&m[0]?m[1]+" "+dayText(m[0]):""};
+const approvalNote=r=>{if(!r.approvedAt)return"";if(r.auto)return'<div class="note">✓ <b>Approved automatically</b> because it is within the supervisor\'s limit.</div>';const l=r.log.find(x=>/^(Created and approved|Approved by)/.test(x[1]));return`<div class="note">Approved by <b>${esc((l&&l[2])||"Supervisor")}</b> on ${pht(r.approvedAt)}.</div>`};
+const urg=r=>r.urgent&&["pending","approved","returned"].includes(r.status)?' <span class="badge e">URGENT</span>':"";
+const ETL=()=>(ETS||ET).filter(t=>t.toLowerCase()!=="others");
+const typeLabel=r=>r.finalType||(r.type==="Others"&&r.typeOther?"Others – "+r.typeOther:r.type||"");
+const typeKey=r=>r.finalType||(r.type==="Others"?"Others (to be classified)":r.type||"Unspecified");
+const ET=["Gas & Oil","Repair & Maintenance","Office Supplies","Meals & Representation","Transportation","Others"];
+let repMonth=today().slice(0,7),repAll=false;
+const mkey=t=>new Date(t+8*36e5).toISOString().slice(0,7);
+const pht=t=>new Date(t).toLocaleString("en-PH",{timeZone:"Asia/Manila",month:"short",day:"numeric",hour:"2-digit",minute:"2-digit",hour12:false});
+const isAppr=r=>["approved","released","liquidated","closed"].includes(r.status);
+function repData(){
+  const L=mine(),inM=t=>repAll||mkey(t)===repMonth,rs=L.filter(r=>inM(r.createdAt));
+  const ap=rs.filter(isAppr),T={};
+  ap.forEach(r=>{const k=typeKey(r);T[k]=T[k]||{n:0,a:0,rl:0,nf:0};T[k].n++;T[k].a+=r.approvedAmount||r.amount;T[k].rl+=r.cashReceived||0;if(!r.finalType)T[k].nf++});
+  return{rs,ap,T,req:rs.reduce((s,r)=>s+r.amount,0),apt:ap.reduce((s,r)=>s+(r.approvedAmount||r.amount),0),rl:rs.reduce((s,r)=>s+(r.cashReceived||0),0)};
+}
+function auditData(){
+  const inM=t=>audAll||mkey(t)===audM,au=[];
+  mine().forEach(r=>r.log.forEach(l=>{if(inM(l[0]))au.push({t:l[0],no:r.no,emp:r.employee,act:l[1],by:l[2]||"",amt:l[3],rm:l[4]||""})}));
+  return au.sort((a,b)=>b.t-a.t);
+}
+function monthBar(id,m,all,xid,title,sub){
+  return `<div class="card"><h2>${title}</h2><p class="mu">${sub}</p><div class="row" style="align-items:flex-end"><div><label>Month</label><input type="month" id="${id}m" value="${m}" ${all?"disabled":""}></div>
+  <label style="display:flex;gap:6px;align-items:center;margin:0 0 8px"><input type="checkbox" id="${id}a" style="width:auto" ${all?"checked":""}> Show all months</label><button class="p" id="${xid}">Download Excel</button></div></div>`;
+}
+function repView(){
+  const d=repData(),T=Object.entries(d.T).sort((a,b)=>b[1].a-a[1].a);
+  return monthBar("rp",repMonth,repAll,"xl","Monthly Report","Choose a month, then download all the records in Excel.")+`
+  <div class="g2" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:12px">
+  ${[[d.rs.length,"Requests"],[peso(d.req),"Total requested"],[peso(d.apt),"Total approved"],[peso(d.rl),"Total released"]].map(([v,l])=>`<div class="card" style="margin:0"><div class="amt" style="font-size:18px">${v}</div><div class="mu">${l}</div></div>`).join("")}</div>
+  <h2>Summary by Expense Type</h2><p class="mu">Expense types are <b>not final</b> until Accounting sets the final type in Review. Requests not yet classified are counted under the type the requester chose (or "Others (to be classified)").</p>
+  <div class="card tw">${T.length?`<table><tr><th>Expense Type</th><th># Approved</th><th>Total Approved</th><th>Total Released</th><th># Not yet final</th></tr>${T.map(([k,v])=>`<tr><td>${esc(k)}</td><td>${v.n}</td><td class="amt">${peso(v.a)}</td><td class="amt">${peso(v.rl)}</td><td>${v.nf?`<span class="badge w">${v.nf}</span>`:"0"}</td></tr>`).join("")}</table>`:'<span class="mu">No data for this month.</span>'}</div>${reqTable(d.rs)}`;
+}
+function auditView(){
+  const au=auditData();
+  return monthBar("u",audM,audAll,"ax","Audit Log","Who did what, and when (Philippine time).")+`<div class="card tw">${au.length?`<table><tr><th>Date &amp; Time</th><th>Request</th><th>Requester</th><th>Action</th><th>Done by</th><th>Amount</th><th>Remarks</th></tr>${au.map(a=>`<tr><td>${pht(a.t)}</td><td><b>${esc(a.no)}</b></td><td>${esc(a.emp)}</td><td>${esc(a.act)}</td><td>${esc(a.by)}</td><td class="amt">${a.amt!=null?peso(a.amt):""}</td><td>${esc(a.rm)}</td></tr>`).join("")}</table>`:'<span class="mu">No entries.</span>'}</div>`;
+}
+async function saveXlsx(sheets,name){
+  if(typeof XLSX==="undefined"){alert("The Excel library did not load. Please refresh the page.");return}
+  const wb=XLSX.utils.book_new();
+  sheets.forEach(([n,rows])=>{const ws=XLSX.utils.aoa_to_sheet(rows);ws["!cols"]=rows[0].map((_,i)=>({wch:Math.min(40,Math.max(12,...rows.map(r=>String(r[i]??"").length)))}));XLSX.utils.book_append_sheet(wb,ws,n)});
+  try{const dl=await claude.use("downloads");if(!dl){alert("Download is not available.");return}await dl.save({filename:name,data:XLSX.write(wb,{bookType:"xlsx",type:"array"})})}catch(e){}
+}
+function bindRep(){
+  $("#rpm").onchange=e=>{if(e.target.value){repMonth=e.target.value;render()}};
+  $("#rpa").onchange=e=>{repAll=e.target.checked;render()};
+  $("#xl").onclick=()=>{
+    const d=repData();
+    saveXlsx([["Requests",[["Request No","Date Requested","Employee","Department","Requested Expense Type","Final Expense Type","Purpose","Remarks","Supervisor Remarks","Requested","Approved","Released","Voucher No","Due Date","Actual Expense","Settlement","Settlement Amount","Status"],
+      ...d.rs.map(r=>{const te=r.items?r.items.reduce((s,i)=>s+i.amt,0):"";return[r.no,pht(r.createdAt),r.employee,r.dept,r.type==="Others"&&r.typeOther?"Others – "+r.typeOther:r.type||"",r.finalType||"",r.purpose,r.remarks||"",r.supNotes||"",r.amount,isAppr(r)?(r.approvedAmount||r.amount):"",r.cashReceived||"",r.voucherNo||"",r.dueDate||"",r.actualExpense??te,r.settleType||"",r.settleAmount||"",ST[r.status][0]]})]],
+      ["Summary by Type",[["Expense Type","# Approved","Total Approved","Total Released","# Not yet final"],...Object.entries(d.T).map(([k,v])=>[k,v.n,v.a,v.rl,v.nf]),["TOTAL",d.ap.length,d.apt,d.rl,""]]]],"petty-cash-"+(repAll?"all":repMonth)+".xlsx");
+  };
+}
+function bindAudit(){
+  $("#um").onchange=e=>{if(e.target.value){audM=e.target.value;render()}};
+  $("#ua").onchange=e=>{audAll=e.target.checked;render()};
+  $("#ax").onclick=()=>saveXlsx([["Audit Log",[["Date & Time (PH)","Request","Requester","Action","Done by","Amount","Remarks"],...auditData().map(a=>[pht(a.t),a.no,a.emp,a.act,a.by,a.amt??"",a.rm])]]],"audit-log-"+(audAll?"all":audM)+".xlsx");
+}
+function settingsView(){
+  if(!ETD)ETD=[...ETL()];
+  return `<div class="card"><h2>Expense Types</h2><p class="mu">These are the choices staff see in <b>Request Budget</b>. <b>Others</b> is always available there, and staff must write what the expense is. Accounting sets the final type in Review.</p>
+  ${ETD.map((t,i)=>`<div class="row" style="margin-bottom:6px"><input data-ei="${i}" value="${esc(t)}" style="flex:1"><button class="d" data-er="${i}">Remove</button></div>`).join("")||'<p class="mu">No expense types yet.</p>'}
+  <div class="row" style="margin-top:10px"><input id="ne" placeholder="New expense type" style="flex:1"><button id="ea">Add</button></div>
+  <div class="row" style="margin-top:12px"><button class="p" id="es">Save expense types</button></div><div class="err" id="ee"></div></div>
+  <div class="card"><h2>Voucher Settings</h2><div class="g2"><div><label>Company name (printed on voucher)</label><input id="vc" value="${esc(VS.company)}"></div><div><label>Voucher no. prefix</label><input id="vp" value="${esc(VS.prefix)}"></div><div><label>Default liquidation days</label><input id="vd" type="number" min="1" value="${esc(VS.days)}"></div></div>
+  <div class="row" style="margin-top:10px"><button class="p" id="vsave">Save voucher settings</button></div></div>`;
+}
+function bindSettings(){
+  document.querySelectorAll("[data-ei]").forEach(i=>i.oninput=()=>{ETD[i.dataset.ei]=i.value});
+  document.querySelectorAll("[data-er]").forEach(b=>b.onclick=()=>{ETD.splice(+b.dataset.er,1);render()});
+  const add=()=>{const v=$("#ne").value.trim();if(!v)return;if(v.toLowerCase()==="others"||ETD.some(t=>t.toLowerCase()===v.toLowerCase())){$("#ee").textContent="That expense type already exists.";return}ETD.push(v);render()};
+  $("#ea").onclick=add;$("#ne").onkeydown=e=>{if(e.key==="Enter")add()};
+  $("#es").onclick=async()=>{const list=[...new Set(ETD.map(t=>t.trim()).filter(t=>t&&t.toLowerCase()!=="others"))];
+    try{await db.doc("settings/expenseTypes").set({list});ETD=null;$("#es").textContent="Saved ✓"}catch(e){$("#ee").textContent="Could not save: "+e.code}};
+  $("#vsave").onclick=async()=>{try{await db.doc("settings/voucher").set({company:$("#vc").value.trim(),prefix:$("#vp").value.trim()||"PCV-",days:parseInt($("#vd").value)||5});$("#vsave").textContent="Saved ✓"}catch(e){alert("Could not save: "+e.code)}};
+}
+const SL={pending:["FOR SUPERVISOR APPROVAL","Waiting for the supervisor to approve.",""],approved:["FOR RELEASE","Please review, then release, return, or reject.","w"],released:["RELEASED","Cash released. Waiting for liquidation.","w"],liquidated:["FOR VERIFICATION","Liquidation submitted. Please verify and close.","w"],closed:["CLOSED","Verified and closed.",""],rejected:["REJECTED","","e"],returned:["RETURNED","Waiting for the requester's clarification.","w"]};
+const FILT={wait:r=>r.status==="pending",rel:r=>r.status==="approved",done:r=>["released","liquidated","closed"].includes(r.status),rej:r=>r.status==="rejected"||r.status==="returned",all:()=>true};
+function accView(){
+  const sum=(f,k)=>reqs.filter(f).reduce((a,r)=>a+k(r),0),cnt=f=>reqs.filter(f).length;
+  const cards=[[cnt(FILT.wait),"Waiting for approval",sum(FILT.wait,r=>r.amount)],[cnt(FILT.rel),"Approved, for release",sum(FILT.rel,r=>r.approvedAmount||r.amount)],[cnt(FILT.done),"Released",sum(FILT.done,r=>r.cashReceived||0)]];
+  const pills=[["wait","Waiting for approval"],["rel","For release"],["done","Released"],["rej","Rejected / Returned"],["all","All"]];
+  const rows=reqs.filter(FILT[accF]);
+  return `${urgBox()}<div class="g2" style="grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;margin-bottom:12px">${cards.map(c=>`<div class="card" style="margin:0"><div class="amt" style="font-size:20px">${c[0]}</div><div class="mu">${c[1]} · ${peso(c[2])}</div></div>`).join("")}</div>
+  <div class="row" style="margin-bottom:12px">${pills.map(([k,l])=>`<button data-f="${k}" class="${accF===k?"p":""}" style="border-radius:99px;font-weight:600">${l}</button>`).join("")}</div>
+  <div class="card tw">${rows.length?`<table><tr><th>Date</th><th>Requester</th><th>Department</th><th>Amount</th><th>Expense Type</th><th>Purpose</th><th>Status</th><th>Accounting Remarks</th><th>Action</th></tr>
+  ${rows.map(r=>{const sl=SL[r.status],late=r.status==="released"&&r.dueDate&&r.dueDate<today();return `<tr><td>${esc(r.dateNeeded)}</td><td>${esc(r.employee)}</td><td>${esc(r.dept)}</td><td class="amt">${peso(r.cashReceived||r.approvedAmount||r.amount)}</td><td>${esc(typeLabel(r))}${r.finalType?"":'<div class="mu">not final</div>'}</td><td>${esc(r.purpose)}</td>
+  <td><span class="badge ${late?"e":sl[2]}">${late?"LATE":sl[0]}</span>${urg(r)}${r.auto?' <span class="badge">AUTO-APPROVED</span>':""}<div class="mu">${esc(age(r)||sl[1]||r.rejectReason||"")}${r.status==="released"?" · Due "+esc(r.dueDate):""}</div></td><td>${esc(r.accRemarks||"")}</td><td><button class="p" data-rv="${r.id}">Review</button></td></tr>`}).join("")}</table>`:'<span class="mu">Nothing here.</span>'}</div>`;
+}
+function bindAcc(){
+  document.querySelectorAll("[data-f]").forEach(b=>b.onclick=()=>{accF=b.dataset.f;render()});
+  document.querySelectorAll("[data-rv]").forEach(b=>b.onclick=()=>review(b.dataset.rv));
+}
+function review(id){
+  const r=reqs.find(x=>x.id===id),sl=SL[r.status],acc=prof.role==="accounting";
+  const kv=[["Request No.",r.no],["Request date",r.dateNeeded],["Requested on",pht(r.createdAt)],...(r.urgent?[["Urgent",r.urgentReason||"Yes"]]:[]),["Employee",r.employee],["Department",r.dept],["Requested expense type",r.type?(r.type==="Others"&&r.typeOther?"Others – "+r.typeOther:r.type):"—"],["Final expense type",r.finalType||"— not yet classified"],["Amount requested",peso(r.amount)],["Amount approved",isAppr(r)?peso(r.approvedAmount||r.amount):"—"],["Purpose",r.purpose],["Remarks",r.remarks||"—"],["Supervisor remarks",r.supNotes||"—"],...(r.voucherNo?[["Voucher No.",r.voucherNo],["Cash released",peso(r.cashReceived)],["Due date",r.dueDate]]:[]),...(r.reply?[["Requester reply",r.reply]]:[]),...(r.approvedAt?[["Approved on",pht(r.approvedAt)+(r.approvedBy==="auto"?" (auto-approved)":"")]]:[]),...(r.auto?[["Approval note","Approved automatically because it was within the supervisor's limit"]]:[]),...(r.releasedAt?[["Released on",pht(r.releasedAt)]]:[]),...(r.liqAt?[["Liquidated on",pht(r.liqAt)]]:[]),...(r.actualExpense!=null?[["Actual expense",peso(r.actualExpense)]]:[]),...(r.settleType&&r.settleType!=="none"?[[r.settleType==="returned"?"Excess cash returned":"Additional cash given",peso(r.settleAmount)+" on "+pht(r.settledAt)]]:[]),...(r.closedAt?[["Closed on",pht(r.closedAt)]]:[]),...(age(r)?[["Aging",age(r)]]:[])];
+  const d=dlg(`<h2>Review ${esc(r.no)} <span class="badge ${sl[2]}">${sl[0]}</span></h2>${approvalNote(r)}<div class="tw"><table>${kv.map(([k,v])=>`<tr><td width="35%"><b>${k}</b></td><td>${esc(v)}</td></tr>`).join("")}</table></div>${r.items?liqTable(r):""}
+  ${acc&&["approved","liquidated"].includes(r.status)?`<label>Accounting remarks</label><textarea id="ar" rows="2">${esc(r.accRemarks||"")}</textarea>`:""}
+  ${acc&&["approved","released","liquidated","closed"].includes(r.status)?`<label>Final expense type (used in reports)</label><div class="row"><select id="ft" style="flex:1"><option value="">— Not yet classified —</option>${ETL().map(t=>`<option ${t===r.finalType?"selected":""}>${esc(t)}</option>`).join("")}</select><button id="sft">Save</button></div>`:""}
+  <div class="row" style="margin-top:12px">${acc&&r.status==="approved"?'<button class="p" id="rl">Release cash</button><button id="rt">Return for clarification</button><button class="d" id="rj">Reject</button>':""}${acc&&r.status==="pending"&&isAdmin?'<button class="p" id="ap">Approve (as Admin)</button><button class="d" id="rj2">Reject</button>':""}${acc&&r.status==="liquidated"?'<button class="p" id="vf">Check &amp; settle</button>':""}${acc&&r.status==="released"?'<button class="p" id="lq">Record liquidation</button>':""}${r.voucherNo?'<button id="pr">🖨 Print voucher &amp; liquidation</button>':""}<button id="x">Close</button></div><div class="err" id="e"></div><details style="margin-top:8px"><summary class="mu">History</summary>${r.log.map(l=>`<div class="mu">${pht(l[0])} – ${esc(l[1])}${l[2]?" ("+esc(l[2])+")":""}</div>`).join("")}</details>`);
+  const ar=()=>($("#ar")?$("#ar").value.trim():""),on=(i,f)=>{const b=$(i);if(b)b.onclick=f};
+  on("#x",()=>d.close());
+  on("#sft",()=>{const v=$("#ft").value;if(!v){$("#e").textContent="Choose a final expense type.";return}d.close();save(id,{finalType:v},"Final expense type set: "+v)});
+  on("#rl",()=>{ARM=ar();d.close();act("release",id)});
+  on("#ap",()=>{d.close();act("approve",id)});on("#rj2",()=>{d.close();act("reject",id)});
+  on("#lq",()=>{d.close();act("liquidate",id)});
+  on("#vf",()=>{d.close();act("verify",id)});
+  on("#pr",()=>{d.close();preview(r)});
+  on("#rt",()=>{const v=ar();if(!v){$("#e").textContent="Write what needs to be clarified in Accounting remarks.";return}d.close();save(id,{status:"returned",accRemarks:v},"Returned for clarification (Accounting)")});
+  on("#rj",()=>{const v=ar();if(!v){$("#e").textContent="Write the reason in Accounting remarks.";return}d.close();save(id,{status:"rejected",rejectReason:v,accRemarks:v},"Rejected by Accounting")});
+}
+function usersView(){
+  const keys=new Set(SU.map(u=>dkey(u.name)));
+  const rows=[...SU.map(u=>({id:u.id,name:u.name,ro:RO[u.id]||PA[dkey(u.name)]||{role:"pending",dept:""},me:u.id===uid})),...Object.entries(PA).filter(([k])=>!keys.has(k)).map(([k,v])=>({pk:k,name:v.name,ro:v}))].sort((a,b)=>(a.name||"").localeCompare(b.name||""));
+  const sel=(at,k,o,c)=>`<select ${at} data-k="${k}">${o.map(([v,l])=>`<option value="${esc(v)}" ${c===v?"selected":""}>${esc(l)}</option>`).join("")}</select>`;
+  const RL=["pending","requester","supervisor","accounting"].map(r=>[r,r.toUpperCase()]),DL=deptList().map(d=>[d,d]);
+  return `<div class="card"><h2>PEOPLE WHO CAN USE THIS SYSTEM</h2><p class="mu">New people sign up themselves. Then you choose their role here. <b>Requester</b> can send requests for their supervisor to approve. <b>Supervisor</b> can approve requests of their department and send requests. <b>Accounting</b> can release cash, print vouchers and see reports. <b>Admin</b> can do everything and manage this list. <b>Pending</b> means no access yet.</p><div class="note"><b>Switching accounts:</b> this page uses your Claude sign-in, so it cannot sign you out. To use another account, sign out of Claude (or open the link in a private window) and sign in again. To test a role, press <b>View as</b> on a person below.</div>
+  <h2 style="margin-top:12px">Add a user</h2><div class="fg"><div><label>Username</label><input id="au"></div><div><label>Role</label><select id="ar2">${RL.slice(1).map(([v,l])=>`<option value="${v}">${l}</option>`).join("")}</select></div><div><label>Department</label><select id="ad">${DL.map(([v,l])=>`<option>${esc(l)}</option>`).join("")}</select></div><div><label>&nbsp;</label><button class="p" id="aadd">Add user</button></div></div>
+  <p class="mu">The person must sign up with this exact username. Their role is set as soon as they sign up.</p><div class="err" id="aue"></div></div>
+  <div class="card tw"><table><tr><th>Name</th><th>Email</th><th>Role</th><th>Department</th><th></th></tr>${rows.map(u=>{const at=u.id?`data-u="${esc(u.id)}"`:`data-p="${esc(u.pk)}"`;
+  return `<tr><td>${esc(u.name)}${u.me?" (you)":""}${u.pk?'<div class="mu">Not signed up yet</div>':""}</td><td data-em="${esc(u.id||"")}"></td><td>${u.me?'<select disabled><option>ADMIN</option></select>':sel(at,"role",RL,u.ro.role)}</td><td>${u.me?`<select disabled><option>${esc(prof.dept)}</option></select>`:sel(at,"dept",[["","—"],...DL],u.ro.dept||"")}</td><td>${u.me?"":`<button data-va="${esc(u.id||"pa_"+u.pk)}" data-n="${esc(u.name)}">View as</button> `}${u.pk?`<button class="d" data-prm="${esc(u.pk)}">Remove</button>`:""}</td></tr>`}).join("")||'<tr><td colspan="5" class="mu">No users yet.</td></tr>'}</table></div>`;
+}
+let realUid=null,realProf=null;
+function viewAs(vid,name){
+  const ro=vid.startsWith("pa_")?PA[vid.slice(3)]:(RO[vid]||PA[dkey(name)]);
+  if(!ro||!ro.role||ro.role==="pending"){alert("Set a role for this person first.");return}
+  if(!realUid){realUid=uid;realProf=prof}
+  uid=vid;isAdmin=false;prof={role:ro.role,dept:ro.dept||"",name};tab="";start();
+}
+function backToAdmin(){uid=realUid;isAdmin=true;prof=realProf;realUid=null;tab="users";start()}
+function bindUsers(){
+  document.querySelectorAll("[data-va]").forEach(b=>b.onclick=()=>viewAs(b.dataset.va,b.dataset.n));
+  document.querySelectorAll("select[data-u],select[data-p]").forEach(el=>el.onchange=async()=>{
+    const id=el.dataset.u,pk=el.dataset.p,cur=(id?RO[id]||PA[dkey((SU.find(u=>u.id===id)||{}).name)]:PA[pk])||{role:"pending",dept:""},nv={role:cur.role||"pending",dept:cur.dept||""};
+    nv[el.dataset.k]=el.value;if(nv.role!=="pending"&&!nv.dept)nv.dept=deptList()[0];
+    try{if(id)await db.doc("roles/"+id).set(nv);else await db.doc("preapproved/"+pk).set({name:PA[pk].name,...nv})}catch(e){alert("Could not save: "+e.code)}el.blur();softRender()});
+  document.querySelectorAll("[data-prm]").forEach(b=>b.onclick=async()=>{try{await db.doc("preapproved/"+b.dataset.prm).delete()}catch(e){alert("Could not remove: "+e.code)}});
+  $("#aadd").onclick=async()=>{const n=$("#au").value.trim();if(!n){$("#aue").textContent="Enter a username.";return}
+    try{await db.doc("preapproved/"+dkey(n)).set({name:n,role:$("#ar2").value,dept:$("#ad").value});$("#au").value="";$("#aue").textContent=""}catch(e){$("#aue").textContent="Could not add: "+e.code}};
+  const ids=SU.map(u=>u.id);if(ids.length&&UU.profiles)UU.profiles(ids).then(ps=>document.querySelectorAll("[data-em]").forEach(td=>{const q=ps[td.dataset.em];td.textContent=(q&&q.email)||""})).catch(()=>{});
+}
+const reqTable=rs=>`<h2>Requests</h2><div class="card tw">${rs.length?`<table><tr><th>Request</th><th>Date</th><th>Requester</th><th>Department</th><th>Expense type</th><th>Requested</th><th>Released</th><th>Voucher</th><th>Status</th></tr>${rs.map(r=>`<tr><td><button data-dt="${r.id}" style="padding:2px 8px">${esc(r.no)}</button></td><td>${esc(r.dateNeeded)}</td><td>${esc(r.employee)}</td><td>${esc(r.dept)}</td><td>${esc(typeLabel(r))}</td><td class="amt">${peso(r.amount)}</td><td class="amt">${r.cashReceived?peso(r.cashReceived):""}</td><td>${r.voucherNo?`<button data-dt="${r.id}" style="padding:2px 8px">${esc(r.voucherNo)}</button>`:""}</td><td>${esc(ST[r.status][0])}<div class="mu">${esc(age(r))}</div></td></tr>`).join("")}</table>`:'<span class="mu">No requests.</span>'}</div>`;
+const urgBox=()=>{const u=reqs.filter(r=>r.urgent&&(r.status==="pending"||r.status==="approved"));
+  return u.length?`<div class="card" style="border-color:var(--er)"><h2 style="color:var(--er)">Urgent requests (needed today)</h2><div class="tw"><table><tr><th>Request</th><th>Requester</th><th>Amount</th><th>Reason</th><th>Status</th><th></th></tr>${u.map(r=>`<tr><td>${esc(r.no)}</td><td>${esc(r.employee)} · ${esc(r.dept)}</td><td class="amt">${peso(r.approvedAmount||r.amount)}</td><td>${esc(r.urgentReason||"")}</td><td>${esc(ST[r.status][0])}<div class="mu">${esc(age(r))}</div></td><td><button class="p" data-rv="${r.id}">Review</button></td></tr>`).join("")}</table></div></div>`:""};
+let flash="",alDept=null;const deptFor=()=>isAdmin?(alDept||prof.dept):prof.dept;
+function autoView(){
+  const D=deptFor(),cfg=AA[dkey(D)]||{},cur=cfg.rules||{},mk=mkey(Date.now());
+  const used=reqs.filter(x=>x.auto&&x.dept===D&&x.status!=="rejected"&&mkey(x.createdAt)===mk).reduce((t,x)=>t+(x.approvedAmount||x.amount),0);
+  return `<div class="card"><h2>Approval Limits</h2>${isAdmin?`<label>Department</label><select id="ald">${deptList().map(d=>`<option ${d===D?"selected":""}>${esc(d)}</option>`).join("")}</select>`:""}<p class="mu">These rules apply to <b>${esc(D)}</b>. A request is approved automatically only if its expense type is turned on, the amount is within that type's limit, and it is within the overall limits below. Everything else still needs your approval. "Others" is never approved automatically.</p>
+  <h2 style="margin-top:12px">1. Overall limits (optional)</h2><div class="g2"><div><label>Highest amount per request (₱)</label><input id="ame" type="number" min="1" value="${cfg.maxEach||""}" placeholder="No overall limit"></div><div><label>Total auto-approved per month (₱)</label><input id="amm" type="number" min="1" value="${cfg.maxMonth||""}" placeholder="No monthly limit"></div></div>
+  <p class="mu">Auto-approved this month: <b>${peso(used)}</b>${cfg.maxMonth?" of "+peso(cfg.maxMonth)+" (left: "+peso(Math.max(0,cfg.maxMonth-used))+")":""}</p>
+  <h2 style="margin-top:12px">2. Auto-approved expense types and their limits</h2><div class="tw"><table><tr><th>On</th><th>Expense type</th><th>Limit per request (₱)</th></tr>${ETL().map((t,i)=>`<tr><td><input type="checkbox" data-ao="${i}" style="width:auto" ${cur[t]>0?"checked":""}></td><td>${esc(t)}</td><td><input type="number" min="1" data-al="${i}" value="${cur[t]||""}"></td></tr>`).join("")}</table></div>
+  <div class="row" style="margin-top:10px"><button class="p" id="asv">Save rules</button></div><div class="err" id="ae"></div></div>`;
+}
+function bindAuto(){
+  if($("#ald"))$("#ald").onchange=e=>{alDept=e.target.value;render()};
+  $("#asv").onclick=async()=>{const rules={};let bad=false;ETL().forEach((t,i)=>{if(document.querySelector(`[data-ao="${i}"]`).checked){const v=parseFloat(document.querySelector(`[data-al="${i}"]`).value);if(v>0)rules[t]=v;else bad=true}});
+    if(bad){$("#ae").textContent="Enter a limit for each type that is turned on.";return}
+    try{await db.doc("autoapprove/"+dkey(deptFor())).set({rules,maxEach:parseFloat($("#ame").value)||0,maxMonth:parseFloat($("#amm").value)||0});$("#asv").textContent="Saved ✓"}catch(e){$("#ae").textContent="Could not save: "+e.code}};
+}
+function fundCalc(){
+  let bal=0,add=0,rel=0,ret=0,ex=0,out=0;const ev=[];
+  FD.forEach(f=>{const v=f.type==="decrease"?-f.amount:f.amount;add+=v;ev.push({t:f.t,l:({opening:"Opening balance",replenish:"Money added",decrease:"Money removed"}[f.type]||"Entry")+(f.note?" – "+f.note:""),v})});
+  reqs.forEach(r=>{if(r.releasedAt){ev.push({t:r.releasedAt,l:"Cash released – "+r.voucherNo+" ("+r.employee+")",v:-r.cashReceived});rel+=r.cashReceived}
+    if(r.settleType==="returned"){ev.push({t:r.settledAt,l:"Excess returned – "+r.voucherNo,v:r.settleAmount});ret+=r.settleAmount}
+    if(r.settleType==="additional"){ev.push({t:r.settledAt,l:"Additional cash given – "+r.voucherNo,v:-r.settleAmount});ex+=r.settleAmount}
+    if(r.status==="released"||r.status==="liquidated")out+=r.cashReceived});
+  ev.sort((a,b)=>a.t-b.t);ev.forEach(e=>{bal+=e.v;e.b=bal});
+  return{bal,add,net:rel-ret+ex,out,ev:ev.reverse()};
+}
+function fundView(){
+  const f=fundCalc();
+  return `<div class="g2" style="grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;margin-bottom:12px">${[[peso(f.bal),"Current fund balance"],[peso(f.add),"Money added to the fund"],[peso(f.net),"Net cash paid out"],[peso(f.out),"Cash with employees (not settled)"]].map(([v,l])=>`<div class="card" style="margin:0"><div class="amt" style="font-size:18px">${v}</div><div class="mu">${l}</div></div>`).join("")}</div>
+  <div class="card"><h2>Add or remove money</h2><div class="fg"><div><label>Type</label><select id="ft2"><option value="opening">Opening balance</option><option value="replenish">Add money (replenishment)</option><option value="decrease">Remove money (correction)</option></select></div><div><label>Amount (₱)</label><input id="fa" type="number" step="0.01" min="0"></div><div style="grid-column:span 2"><label>Note</label><input id="fn"></div></div><div class="row" style="margin-top:10px"><button class="p" id="fadd">Save</button></div><div class="err" id="fe"></div></div>
+  <h2>Fund history</h2><div class="card tw"><table><tr><th>Date</th><th>Description</th><th>In</th><th>Out</th><th>Balance</th></tr>${f.ev.map(e=>`<tr><td>${pht(e.t)}</td><td>${esc(e.l)}</td><td class="amt">${e.v>0?peso(e.v):""}</td><td class="amt">${e.v<0?peso(-e.v):""}</td><td class="amt">${peso(e.b)}</td></tr>`).join("")||'<tr><td colspan="5" class="mu">No entries yet. Add the opening balance first.</td></tr>'}</table></div>`;
+}
+function bindFund(){
+  $("#fadd").onclick=async()=>{const a=parseFloat($("#fa").value);if(!(a>0)){$("#fe").textContent="Enter an amount.";return}
+    try{await db.collection("fund").doc("f"+Date.now()).set({t:Date.now(),type:$("#ft2").value,amount:a,note:$("#fn").value.trim(),by:prof.name})}catch(e){$("#fe").textContent="Could not save: "+e.code}};
+}
+function guideView(){
+  const R=prof.role,box=(t,l)=>`<div class="card"><h2>${t}</h2><ol style="margin:0;padding-left:20px">${l.map(x=>`<li style="margin-bottom:4px">${x}</li>`).join("")}</ol></div>`;
+  const rq=box("For people who request cash",["Open <b>Request Budget</b> and fill in your name, department, amount, expense type, and purpose.","Choose <b>Others</b> if your expense type is not in the list, then write what it is.","Send the request. Your supervisor approves it, then Accounting releases the cash. Some expense types are approved automatically up to a limit.","Cash is released at least 1 working day after approval. If you need it today, tick <b>Urgent</b> and explain why.","Collect the cash from Accounting and sign the voucher. Keep your voucher copy.","Keep all receipts for what you buy.","Before the due date, give Accounting your voucher copy, the liquidation form, and your receipts.","Return any extra cash. If you spent more, Accounting will check it and decide about the extra cash.","You cannot make a new request until your last cash is liquidated."]);
+  const sp=box("For supervisors",["Open <b>To Approve</b> to see requests from your department.","Check the purpose and amount. You can change the approved amount and add remarks.","Approve the request, or reject it and give a reason.","Use <b>Approval Limits</b> to choose expense types that are approved automatically and to set the limit for each one.","Requests with a red <b>URGENT</b> tag are needed today. Review them first.","You can also send a request for your staff in <b>Request Budget</b>. It is approved right away.","Use <b>Reports</b> and <b>Audit Log</b> to check your department."]);
+  const ac=box("For Accounting",["Open <b>Accounting</b>. Urgent requests for today are shown at the top.","Review each approved request. Release the cash, return it with a question, or reject it.","Set the final expense type in <b>Review</b>. Reports use the final type.","When the employee brings the voucher copy, liquidation form, and receipts, open <b>Open Cash</b> and press <b>Liquidate</b>. Enter the actual expenses.","Press <b>Check &amp; Settle</b>. If there is excess cash, confirm you received it. If more cash was needed, confirm you gave it.","Keep <b>Petty Cash Fund</b> updated. Add money when the fund is replenished.","Use <b>Settings</b> for expense types and voucher options. Admin uses <b>Users</b> to add people and set roles."]);
+  return R==="accounting"?rq+sp+ac:R==="supervisor"?rq+sp:rq;
+}
+
+init();
+</script></body></html>
